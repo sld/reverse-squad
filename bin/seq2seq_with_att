@@ -10,12 +10,12 @@ export DEV_TARGETS_REF=redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
 export TRAIN_STEPS=1000000
 
 
-export MODEL_DIR=/mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/projects/reverse-squad/tmp/
+export MODEL_DIR=$(pwd)/tmp/
 mkdir -p $MODEL_DIR
 
 python -m bin.train \
   --config_paths="
-      ./seq2seq/example_configs/squad.yml,
+      ./seq2seq/example_configs/reverse_squad.yml,
       ./seq2seq/example_configs/train_seq2seq.yml,
       ./seq2seq/example_configs/text_metrics_raw.yml" \
   --model_params "
