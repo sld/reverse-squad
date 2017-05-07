@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cat redistribute/QG/train/train.txt.source.txt \
+    redistribute/QG/train/train.txt.target.txt \
+    | seq2seq/bin/tools/generate_vocab.py > data/vocab
+
+head -n 20000 data/vocab > data/vocab-20000

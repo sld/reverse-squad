@@ -17,7 +17,7 @@ python -m bin.train \
   --config_paths="
       ./seq2seq/example_configs/squad.yml,
       ./seq2seq/example_configs/train_seq2seq.yml,
-      ./seq2seq/example_configs/text_metrics_bpe.yml" \
+      ./seq2seq/example_configs/text_metrics_raw.yml" \
   --model_params "
       vocab_source: $VOCAB_SOURCE
       vocab_target: $VOCAB_TARGET" \
