@@ -2,3 +2,4 @@ data/
 redistribute/
 seq2seq_original/
 tmp/
+.idea/

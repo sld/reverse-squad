@@ -7,7 +7,7 @@ export TRAIN_TARGETS=redistribute/QG/train/train.txt.target.txt
 export DEV_SOURCES=redistribute/QG/dev/dev.txt.shuffle.dev.source.txt
 export DEV_TARGETS=redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
 export DEV_TARGETS_REF=redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
-export TRAIN_STEPS=1000000
+export TRAIN_STEPS=50000
 
 
 export MODEL_DIR=$(pwd)/tmp/
@@ -17,7 +17,7 @@ python -m bin.train \
   --config_paths="
       ./seq2seq/example_configs/reverse_squad.yml,
       ./seq2seq/example_configs/train_seq2seq.yml,
-      ./seq2seq/example_configs/text_metrics_raw.yml" \
+      ./seq2seq/example_configs/text_metrics_raw_bleu.yml" \
   --model_params "
       vocab_source: $VOCAB_SOURCE
       vocab_target: $VOCAB_TARGET" \
@@ -35,6 +35,8 @@ python -m bin.train \
         - $DEV_SOURCES
        target_files:
         - $DEV_TARGETS" \
-  --batch_size 32 \
+  --batch_size 64 \
   --train_steps $TRAIN_STEPS \
-  --output_dir $MODEL_DIR
+  --output_dir $MODEL_DIR \
+  --eval_every_n_steps=2500 \
+  --keep_checkpoint_max=20
