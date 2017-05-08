@@ -38,5 +38,5 @@ python -m bin.train \
   --batch_size 64 \
   --train_steps $TRAIN_STEPS \
   --output_dir $MODEL_DIR \
-  --eval_every_n_steps=2500 \
-  --keep_checkpoint_max=20
+  --eval_every_n_steps=1000 \
+  --keep_checkpoint_max=50
