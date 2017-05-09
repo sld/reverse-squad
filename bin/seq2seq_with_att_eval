@@ -4,7 +4,7 @@
 
 export MODEL_DIR=$(pwd)/tmp
 export DEV_SOURCES=redistribute/QG/dev/dev.txt.shuffle.dev.source.txt
-export DEV_TARGETS_REF=data/with_unkn.dev.target.txt #redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
+export DEV_TARGETS_REF=redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
 export PRED_DIR=$(pwd)/pred
 export VOCAB_SOURCE=data/vocab-20000
 
@@ -12,7 +12,7 @@ python -m bin.infer \
   --tasks "
     - class: DecodeText" \
   --model_dir $MODEL_DIR \
-  --checkpoint_path $MODEL_DIR/model.ckpt-12001 \
+  --checkpoint_path $MODEL_DIR/model.ckpt-13001 \
   --batch_size 256 \
   --input_pipeline "
     class: ParallelTextInputPipeline

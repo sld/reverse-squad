@@ -1,5 +1,8 @@
 #!/bin/bash
-
+mkdir data/
+mkdir eval/
+mkdir tmp/
+mkdir tmp/eval_bleu_train
 cat redistribute/QG/train/train.txt.source.txt \
     redistribute/QG/train/train.txt.target.txt \
     | seq2seq/bin/tools/generate_vocab.py > data/vocab
