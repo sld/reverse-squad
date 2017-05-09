@@ -3,19 +3,17 @@
 # Evaluate model in test set using beam search and bleu
 
 export MODEL_DIR=$(pwd)/tmp
-export DEV_SOURCES=redistribute/QG/test/dev.txt.shuffle.test.source.txt
-export DEV_TARGETS_REF=redistribute/QG/test/dev.txt.shuffle.test.target.txt
+export DEV_SOURCES=redistribute/QG/dev/dev.txt.shuffle.dev.source.txt
+export DEV_TARGETS_REF=data/with_unkn.dev.target.txt #redistribute/QG/dev/dev.txt.shuffle.dev.target.txt
 export PRED_DIR=$(pwd)/pred
+export VOCAB_SOURCE=data/vocab-20000
 
 python -m bin.infer \
   --tasks "
-    - class: DecodeText
-    - class: DumpBeams
-      params:
-        file: ${PRED_DIR}/beams.npz" \
+    - class: DecodeText" \
   --model_dir $MODEL_DIR \
-  --model_params "
-    inference.beam_search.beam_width: 12" \
+  --checkpoint_path $MODEL_DIR/model.ckpt-12001 \
+  --batch_size 256 \
   --input_pipeline "
     class: ParallelTextInputPipeline
     params:
