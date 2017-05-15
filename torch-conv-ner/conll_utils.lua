@@ -78,4 +78,10 @@ function get_set_from_files(files)
   return set
 end
 
-function to_cuda(x) return cuda and x:cuda() or x end
+function to_cuda(x)
+  if type(x) ~= 'userdata' then
+    return cuda and x:cuda() or x
+  else
+    return x
+  end
+end
