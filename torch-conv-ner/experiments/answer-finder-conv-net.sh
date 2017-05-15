@@ -39,4 +39,4 @@ th utils/index-to-torch-tensors-converter.lua \
   -isCapDataset \
   -len 20 -outFile data/reverse-squad/train.iobes.win.torch -mode win
 
-# th conll_learn.lua -version 1-ans-win -mode win -model_name win -batch_size 128
+# th conll_learn.lua -version 2-ans-win -mode win -model_name win -batch_size 128

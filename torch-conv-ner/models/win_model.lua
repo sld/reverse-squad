@@ -30,25 +30,23 @@ function make_net(embeddings_path)
   local sp = nn.SplitTable(1, 2)
   sp.updateGradInput = function() end
 
-  local net_conv = nn.Sequential()
-  net_conv:add(sp)
-  net_conv:add(parallel_lookup)
-  net_conv:add(nn.JoinTable(3))
-  local conv_fan_in = 5 * total_vec_size
-  net_conv:add(nn.TemporalConvolution(total_vec_size, hidden_units, 5, 1):init('weight', nninit.uniform, -1.0 / math.sqrt(conv_fan_in), 1.0 / math.sqrt(conv_fan_in)))
-  net_conv:add(nn.Max(2))
-  net_conv:add(nn.Dropout())
-  net_conv:add(nn.Linear(hidden_units, hidden_units):init('weight', nninit.uniform, -1.0 / math.sqrt(hidden_units), 1.0 / math.sqrt(hidden_units)))
-  net_conv:add(nn.Dropout())
-  net_conv:add(nn.HardTanh())
-  net_conv:add(nn.Linear(hidden_units, num_classes):init('weight', nninit.uniform, -1.0 / math.sqrt(hidden_units), 1.0 / math.sqrt(hidden_units)))
+  local net = nn.Sequential()
+  net:add(sp)
+  net:add(parallel_lookup)
+  net:add(nn.JoinTable(3))
+  linear_concat_size = total_vec_size * 5
+  net:add(nn.Reshape(linear_concat_size, true))
+  net:add(nn.Linear(linear_concat_size, hidden_units):init('weight', nninit.uniform, -1.0 / math.sqrt(linear_concat_size), 1.0 / math.sqrt(hidden_units)))
+  net:add(nn.Dropout())
+  net:add(nn.HardTanh())
+  net:add(nn.Linear(hidden_units, num_classes):init('weight', nninit.uniform, -1.0 / math.sqrt(hidden_units), 1.0 / math.sqrt(hidden_units)))
 
   local criterion = nn.CrossEntropyCriterion()
   criterion = conll_utils.to_cuda(criterion)
 
-  net_conv = conll_utils.to_cuda(net_conv)
+  net = conll_utils.to_cuda(net)
 
-  print(net_conv)
+  print(net)
 
-  return net_conv, criterion
+  return net, criterion
 end
