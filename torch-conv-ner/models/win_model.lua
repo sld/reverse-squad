@@ -6,7 +6,7 @@ local nninit = require 'nninit'
 module('win_model', package.seeall)
 
 function make_net(embeddings_path)
-  local hidden_units = 300
+  local hidden_units = 1024
   local num_classes = 5
 
   local data = torch.load(embeddings_path)

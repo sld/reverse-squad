@@ -287,7 +287,7 @@ local function run()
   log_file:close()
 
   local label_map_file = 'data/reverse-squad/label-map.index'
-  local evaluate_freq = 2
+  local evaluate_freq = 10
   local test_info = { torch_test_filename=torch_test_filename,
     label_map_file=label_map_file, original_test_filename=original_test_filename,
     evaluate_freq=evaluate_freq, test_set=torch.load(torch_test_filename),
