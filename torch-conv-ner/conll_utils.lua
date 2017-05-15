@@ -79,7 +79,7 @@ function get_set_from_files(files)
 end
 
 function to_cuda(x)
-  if type(x) ~= 'userdata' then
+  if type(x) ~= 'userdata' and type(x) ~= 'number' then
     return cuda and x:cuda() or x
   else
     return x
