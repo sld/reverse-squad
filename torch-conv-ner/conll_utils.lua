@@ -71,7 +71,9 @@ function get_set_from_files(files)
     end
   end
 
-  print('union set size is ', table.getn(set), table.getn(set.data), table.getn(set.labels))
+  if type(set.data) ~= 'userdata' then
+    print('union set size is ', table.getn(set), table.getn(set.data), table.getn(set.labels))
+  end
 
   return set
 end

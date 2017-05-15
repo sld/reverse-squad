@@ -4,6 +4,7 @@ require 'conll_evaluator'
 require 'optim'
 require 'conll_utils'
 require 'models/convolution_model'
+require 'models/win_model'
 local nninit = require 'nninit'
 
 cuda = false
@@ -139,7 +140,6 @@ local function train_model(net_info, train_info, test_info, with_separate_lr)
     local subset_data = nil
     local subset_labels = nil
     local per_batch_time = nil
-
     for i = 1, train_set_size, batch_size do
       for j = 1, #layerGradParameters do
         layerGradParameters[j]:zero()
@@ -194,6 +194,8 @@ local function make_net(embeddings_path, compreno_svd_path, model_name_raw)
   model_name = model_name:gsub('-full', '')
   if model_name == 'convolution' then
     return convolution_model.make_net(embeddings_path)
+  elseif model_name == 'win' then
+    return win_model.make_net(embeddings_path)
   end
 end
 
@@ -210,9 +212,9 @@ local function get_learning_data(model_name)
   local torch_test_filename = nil
   local original_test_filename = nil
 
-  train_set_files = { 'data/conll2003/eng.train.iobes.torch' }
-  torch_test_filename = 'data/conll2003/eng.testb.test.iobes.torch'
-  original_test_filename = 'data/conll2003/eng.testb.test.iobes'
+  train_set_files = { 'data/reverse-squad/train.iobes.win.torch' }
+  torch_test_filename = 'data/reverse-squad/dev.iobes.win.torch'
+  original_test_filename = 'data/reverse-squad/dev.iobes'
 
   return torch_test_filename, original_test_filename, train_set_files
 end
@@ -245,7 +247,7 @@ local function run()
   local embeddings_path = 'data/embeddings/senna.torch'
   local compreno_svd_path = 'data/conll-abbyy/conll/compreno-vectors.torch'
   local version = params.version
-  local save_prefix = 'snapshots/smotri-net-v'..version
+  local save_prefix = 'snapshots/ans-win-net-v'..version
   local net, criterion = nil
 
   net, criterion = make_net(embeddings_path, compreno_svd_path, params.model_name)
@@ -284,7 +286,7 @@ local function run()
   log_file:write(net:__tostring__()..'\n')
   log_file:close()
 
-  local label_map_file = 'data/conll2003/label-map.index'
+  local label_map_file = 'data/reverse-squad/label-map.index'
   local evaluate_freq = 2
   local test_info = { torch_test_filename=torch_test_filename,
     label_map_file=label_map_file, original_test_filename=original_test_filename,

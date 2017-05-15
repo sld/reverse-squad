@@ -260,7 +260,8 @@ local function run_win(params)
   local data, labels = get_data_and_labels_win(params.inFile, numLines, params.len)
 
   if params.isCapDataset then
-    data:resize(numLines, 2, 5)
+    -- TODO: Delete this hard coded stuff (#features_type, #win)
+    data:resize(numLines, 4, 5)
   end
 
   local stuff = {

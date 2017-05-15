@@ -5,7 +5,7 @@ from sys import argv
 from collections import defaultdict
 from itertools import chain
 
-MAX_SENT_LEN = 126
+MAX_SENT_LEN = 300
 LOC_GZ_OFF = 1
 MISC_GZ_OFF = 2
 ORG_GZ_OFF = 3
@@ -143,7 +143,7 @@ def docs_with_sents(filename):
         docs.append(doc)
     return docs
 
-def sent_conll_in_id(docs, label_int_map, voc_int_map, gazetteers):
+def sent_conll_in_id(docs, label_int_map, voc_int_map, gazetteers=None):
     save_docs = []
     line_pointer = 0
     for doc in docs:
@@ -157,11 +157,12 @@ def sent_conll_in_id(docs, label_int_map, voc_int_map, gazetteers):
                 sent_word_ids = [voc_int_map['PADDING']]
                 sent_cap_ids = [get_cap_id('PADDING')]
                 pos_id = -(i + 1)
-                sent_pos_ids = [pos_id + MAX_SENT_LEN]
+                sent_pos_ids = [max(0, pos_id + MAX_SENT_LEN)]
 
                 label_id = label_int_map[sent[i][-1]]
                 row = [label_id]
-                gazetteer_ids = get_gazetteer_features(sent, gazetteers)
+                if gazetteers is not None:
+                    gazetteer_ids = get_gazetteer_features(sent, gazetteers)
 
                 for ind, parts in enumerate(sent):
                     word = parts[0]
@@ -172,19 +173,20 @@ def sent_conll_in_id(docs, label_int_map, voc_int_map, gazetteers):
                     else:
                         word_id = voc_int_map['UNKNOWN']
                     pos_id = pos_id + 1
-                    sent_pos_ids.append(pos_id + MAX_SENT_LEN)
+                    sent_pos_ids.append(max(0, pos_id + MAX_SENT_LEN))
                     sent_cap_ids.append(cap_id)
                     sent_word_ids.append(word_id)
 
                 pos_id = pos_id + 1
-                sent_pos_ids.append(pos_id + MAX_SENT_LEN)
+                sent_pos_ids.append(max(0, pos_id + MAX_SENT_LEN))
                 sent_word_ids.append(voc_int_map['PADDING'])
                 sent_cap_ids.append(get_cap_id('PADDING'))
 
                 row += sent_word_ids
                 row += sent_cap_ids
                 row += sent_pos_ids
-                row += gazetteer_ids
+                if gazetteers is not None:
+                    row += gazetteer_ids
                 save_sent.append(row)
 
                 line_pointer += 1
@@ -383,12 +385,16 @@ def get_filenames(mode):
         # return ['eng.testa.dev.iobes.subset']
     elif mode == 'sentence-convolution':
         return ['eng.testa.dev.iobes', 'eng.train.iobes', 'eng.testb.test.iobes']
+    elif mode =='ans-conv':
+        return ['dev.iobes', 'train.iobes-300000']
     else:
         raise Exception('Incorrect mode {0}'.format(mode))
 
-
-def get_filenames_for_indexing():
-    return ['eng.testa.dev.iobes', 'eng.testb.test.iobes', 'eng.train.iobes']
+def get_filenames_for_indexing(mode=None):
+    if mode == 'ans-conv':
+        return ['dev.iobes', 'train.iobes-300000']
+    else:
+        return ['eng.testa.dev.iobes', 'eng.testb.test.iobes', 'eng.train.iobes']
 
 def run_win(mode):
     w2v_file = 'data/embeddings/senna.w2v'
@@ -461,9 +467,41 @@ def run_sent(mode):
         print(len(sent_docs), len(to_torch))
 
 
+def run_sent_ans(mode):
+    w2v_file = 'data/embeddings/senna.w2v'
+    data_dir = 'data/reverse-squad/'
+    filenames = get_filenames(mode)
+    filenames_for_indexing = get_filenames_for_indexing(mode)
+    senna_vecs = get_senna_vecs(w2v_file)
+    normalized_conll_tokens = get_normalized_conll_tokens(data_dir, filenames_for_indexing)
+    senna_vecs = get_intersect_vecs(senna_vecs, normalized_conll_tokens)
+
+    vocabulary = senna_vecs.keys()
+    voc_int_map = get_vocabulary_int_map(vocabulary)
+    senna_int_map = get_features_int_map(senna_vecs, voc_int_map)
+    label_int_map = get_label_int_map(data_dir + filenames_for_indexing[-1])
+
+    save_index_by_table(senna_int_map, 'data/embeddings/senna.index')
+    save_index_by_table(voc_int_map, data_dir + '/vocab-map.index')
+    save_index_by_table(label_int_map, data_dir + '/label-map.index')
+
+    for filename in filenames:
+        print('Processing {0} with {1} mode'.format(filename, mode))
+        docs = docs_with_sents(data_dir + filename)
+        sent_docs = sent_conll_in_id(docs, label_int_map, voc_int_map)
+        to_torch, pos = convert_to_torch_format(sent_docs)
+
+        save_index_by_array(to_torch, data_dir + '/{0}.index'.format(filename))
+        save_index_by_table(pos, data_dir + '/{0}.index-line-pos'.format(filename))
+
+        print(len(sent_docs), len(to_torch))
+
+
 if __name__ == '__main__':
     mode = argv[1]
     if mode == 'sentence-convolution' or mode == 'compreno-subset':
         run_sent(mode)
     elif mode == 'win' or mode == 'compreno-subset-win':
         run_win(mode)
+    elif mode == 'ans-conv':
+        run_sent_ans(mode)

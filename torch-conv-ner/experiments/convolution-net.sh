@@ -18,4 +18,4 @@ th utils/index-to-torch-tensors-converter.lua -inFile data/conll2003/eng.testa.d
 th utils/index-to-torch-tensors-converter.lua -inFile data/conll2003/eng.train.iobes.index  -outFile data/conll2003/eng.train.iobes.torch -mode sentence-convolution -batchedMode
 
 # Run learning
-th conll_learn.lua -version 1-convolution-sentence-net-fixed -mode sent -cuda -model_name convolution-full
+th conll_learn.lua -version 1-convolution-sentence-net-fixed -mode sent -model_name convolution-full
