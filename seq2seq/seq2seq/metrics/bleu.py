@@ -59,11 +59,11 @@ def moses_multi_bleu(hypotheses, references, lowercase=False):
     multi_bleu_path = os.path.join(bin_dir, "tools/multi-bleu.perl")
 
   # Dump hypotheses and references to tempfiles
-  hypothesis_file = '/mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/projects/reverse-squad/tmp/eval_bleu_train/hypothesis'
+  hypothesis_file = '/tmp/eval_bleu_train_hypothesis'
   hypothesis_file.write("\n".join(hypotheses).encode("utf-8"))
   hypothesis_file.write(b"\n")
   hypothesis_file.flush()
-  reference_file = '/mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/projects/reverse-squad/tmp/eval_bleu_train/reference'
+  reference_file = '/tmp/eval_bleu_train_reference'
   reference_file.write("\n".join(references).encode("utf-8"))
   reference_file.write(b"\n")
   reference_file.flush()
