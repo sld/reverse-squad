@@ -1,0 +1,34 @@
+#!/bin/bash
+
+mkdir data/opennmt/
+
+# python preserve_only_numeric_and_ner.py dev
+# python preserve_only_numeric_and_ner.py train
+
+cd opennmt
+# th preprocess.lua -train_src ../data/filtered/train/source.txt.txt \
+#   -train_tgt ../data/filtered/train/target.txt.txt \
+#   -valid_src ../data/filtered/dev/source.txt.txt \
+#   -valid_tgt ../data/filtered/dev/target.txt.txt \
+#   -save_data ../data/opennmt/seq2seq \
+#   -data_type bitext \
+#   -src_vocab_size 30000 \
+#   -tgt_vocab_size 30000
+
+
+th train.lua -data ../data/opennmt/seq2seq-train.t7 \
+  -save_model seq2seq-with-att-model \
+  -word_vec_size 300 \
+  -rnn_size 512 \
+  -rnn_type GRU \
+  -enc_layers 1 \
+  -dec_layers 1 \
+  -dropout 0.5 \
+  -brnn true \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 500 \
+  -learning_rate 0.001
+
+
+
