@@ -1,8 +1,8 @@
 # what computational problem is commonly associated with prime factorization ?
-# the B
-# integer I
-# factorization I
-# problem I
+# the B-ANS
+# integer I-ANS
+# factorization I-ANS
+# problem I-ANS
 # is O
 # the O
 # computational O
