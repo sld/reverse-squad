@@ -18,6 +18,18 @@ th preprocess.lua -train_src ../data/filtered/train/featured_source.txt \
   -src_vocab_size 30000 \
   -tgt_vocab_size 30000
 
+luarocks install lua-zlib
+
+th tools/embeddings.lua -dict_file ../data/opennmt/seq2seq_featured.src.dict \
+  -embed_file ../data/embeddings/glove.6B.300d.txt \
+  -save_data ../data/opennmt/seq2seq_glove.src \
+  -embed_type glove
+
+th tools/embeddings.lua -dict_file ../data/opennmt/seq2seq_featured.tgt.dict \
+  -embed_file ../data/embeddings/glove.6B.300d.txt \
+  -save_data ../data/opennmt/seq2seq_glove.tgt \
+  -embed_type glove
+
 th train.lua -data ../data/opennmt/seq2seq_featured-train.t7 \
   -save_model ../data/opennmt/seq2seq-featured-model \
   -word_vec_size 300 \
@@ -31,4 +43,9 @@ th train.lua -data ../data/opennmt/seq2seq_featured-train.t7 \
   -optim adam \
   -save_every 500 \
   -learning_rate 0.001 \
+  -feat_vec_size 32 \
+  -pre_word_vecs_enc ../data/opennmt/seq2seq_glove.src-embeddings-300.t7 \
+  -src_word_vec_size 300 \
+  -pre_word_vecs_dec ../data/opennmt/seq2seq_glove.tgt-embeddings-300.t7 \
+  -tgt_word_vec_size 300 \
   -gpuid 1
