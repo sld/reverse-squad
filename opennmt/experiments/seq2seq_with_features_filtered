@@ -32,7 +32,6 @@ th tools/embeddings.lua -dict_file ../data/opennmt/seq2seq_featured.tgt.dict \
 
 th train.lua -data ../data/opennmt/seq2seq_featured-train.t7 \
   -save_model ../data/opennmt/seq2seq-featured-model \
-  -word_vec_size 300 \
   -rnn_size 512 \
   -rnn_type GRU \
   -enc_layers 1 \
