@@ -26,12 +26,12 @@ if [ "$MODE" != "only_train" ]; then
   th tools/embeddings.lua -dict_file ../data/opennmt/seq2seq_featured.src.dict \
     -embed_file ../data/embeddings/glove.6B.300d.txt \
     -save_data ../data/opennmt/seq2seq_glove.src \
-    -embed_type glove
+    -embed_type glove -approximate
 
   th tools/embeddings.lua -dict_file ../data/opennmt/seq2seq_featured.tgt.dict \
     -embed_file ../data/embeddings/glove.6B.300d.txt \
     -save_data ../data/opennmt/seq2seq_glove.tgt \
-    -embed_type glove
+    -embed_type glove -approximate
 else
   cd opennmt
 fi
