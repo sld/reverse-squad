@@ -57,7 +57,7 @@ def main_pred(text_filename, true_bio_filename, pred_bio_filename):
     sentences = read_file(text_filename)
     true_answers_bio = read_file(true_bio_filename)
     pred_answers_bio = read_file(pred_bio_filename)
-    print('-DOCSTART- O')
+    print('-DOCSTART- -X- O')
     print('')
     for i in range(len(sentences)):
         tokens = sentences[i].split(' ')
