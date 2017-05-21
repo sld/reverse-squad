@@ -8,8 +8,8 @@ if [ "$MODE" != "only_train" ]; then
   python preserve_only_numeric_and_ner.py dev
   python preserve_only_numeric_and_ner.py train
 
-  python convert_to_multi_feature_opennmt.py dev
-  python convert_to_multi_feature_opennmt.py train
+  python convert_to_multi_feature_opennmt.py filtered dev
+  python convert_to_multi_feature_opennmt.py filtered train
 
   cd opennmt
   th preprocess.lua -train_src ../data/filtered/train/featured_source.txt \
