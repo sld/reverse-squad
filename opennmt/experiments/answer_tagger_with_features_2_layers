@@ -1,0 +1,32 @@
+#!/bin/bash
+
+mkdir -p data/opennmt/answer_tagger_featured_2_layers/
+
+python convert_to_multi_feature_opennmt.py raw dev
+python convert_to_multi_feature_opennmt.py raw train
+
+cd opennmt
+th preprocess.lua -train_src ../data/opennmt/raw/train-featured_source.txt \
+  -train_tgt ../redistribute/QG/train/train.txt.bio \
+  -valid_src ../data/opennmt/raw/dev-featured_source.txt \
+  -valid_tgt ../redistribute/QG/dev/dev.txt.shuffle.dev.bio \
+  -save_data ../data/opennmt/answer_tagger_featured \
+  -data_type bitext \
+  -src_vocab_size 30000 \
+  -tgt_vocab_size 30000
+
+th train.lua -data ../data/opennmt/answer_tagger_featured-train.t7 \
+  -save_model ../data/opennmt/answer_tagger_featured_2_layers/model \
+  -rnn_size 512 \
+  -word_vec_size 300 \
+  -rnn_type GRU \
+  -enc_layers 2 \
+  -dec_layers 2 \
+  -dropout 0.5 \
+  -brnn true \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 500 \
+  -learning_rate 0.001 \
+  -gpuid 1
+
