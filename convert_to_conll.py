@@ -27,7 +27,7 @@ def read_file(filename):
         return [line.strip() for line in f]
 
 
-def main(text_filename, answer_bio_filename, pos_filename, ner_filename, case_filename):
+def main_features(text_filename, answer_bio_filename, pos_filename, ner_filename, case_filename):
     sentences = read_file(text_filename)
     answers_bio = read_file(answer_bio_filename)
     ner = read_file(ner_filename)
@@ -53,12 +53,44 @@ def main(text_filename, answer_bio_filename, pos_filename, ner_filename, case_fi
         print('')
 
 
+def main_pred(text_filename, true_bio_filename, pred_bio_filename):
+    sentences = read_file(text_filename)
+    true_answers_bio = read_file(true_bio_filename)
+    pred_answers_bio = read_file(pred_bio_filename)
+    print('-DOCSTART- O')
+    print('')
+    for i in range(len(sentences)):
+        tokens = sentences[i].split(' ')
+        true_ans_tags = true_answers_bio[i].split(' ')
+        pred_ans_tags = pred_answers_bio[i].split(' ')
+        for j in range(len(tokens)):
+            true_ans_tag = true_ans_tags[j]
+            pred_ans_tag = pred_ans_tags[j]
+
+            token = tokens[j]
+            if true_ans_tag != 'O':
+                true_ans_tag = "{}-ANS".format(true_ans_tag)
+
+            if pred_ans_tag != 'O':
+                pred_ans_tag = "{}-ANS".format(pred_ans_tag)
+            print(token, true_ans_tag, pred_ans_tag)
+        print('')
+
+
+
 if __name__ == '__main__':
     signal(SIGPIPE, SIG_DFL)
 
-    text_filename = argv[1]
-    answer_bio_filename = argv[2]
-    pos_filename = argv[3]
-    ner_filename = argv[4]
-    case_filename = argv[5]
-    main(text_filename, answer_bio_filename, pos_filename, ner_filename, case_filename)
+    mode = argv[1]
+    if mode == 'features':
+        text_filename = argv[2]
+        answer_bio_filename = argv[3]
+        pos_filename = argv[4]
+        ner_filename = argv[5]
+        case_filename = argv[6]
+        main_features(text_filename, answer_bio_filename, pos_filename, ner_filename, case_filename)
+    elif mode == 'pred':
+        text_filename = argv[2]
+        true_bio_filename = argv[3]
+        pred_bio_filename = argv[3]
+        main_pred(text_filename, true_bio_filename, pred_bio_filename)
