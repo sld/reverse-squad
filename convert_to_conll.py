@@ -63,9 +63,13 @@ def main_pred(text_filename, true_bio_filename, pred_bio_filename):
         tokens = sentences[i].split(' ')
         true_ans_tags = true_answers_bio[i].split(' ')
         pred_ans_tags = pred_answers_bio[i].split(' ')
+#        print(i, len(tokens), len(true_ans_tags), len(pred_ans_tags))
         for j in range(len(tokens)):
             true_ans_tag = true_ans_tags[j]
-            pred_ans_tag = pred_ans_tags[j]
+            if j >= len(pred_ans_tags):
+                pred_ans_tag = 'O'
+            else:
+                pred_ans_tag = pred_ans_tags[j]
 
             token = tokens[j]
             if true_ans_tag != 'O':
@@ -92,5 +96,5 @@ if __name__ == '__main__':
     elif mode == 'pred':
         text_filename = argv[2]
         true_bio_filename = argv[3]
-        pred_bio_filename = argv[3]
+        pred_bio_filename = argv[4]
         main_pred(text_filename, true_bio_filename, pred_bio_filename)
