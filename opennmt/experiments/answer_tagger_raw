@@ -5,8 +5,8 @@ mkdir data/opennmt/
 cd opennmt
 th preprocess.lua -train_src ../redistribute/QG/train/train.txt.source.txt \
   -train_tgt ../redistribute/QG/train/train.txt.bio \
-  -valid_src ../redistribute/QG/train/dev.txt.shuffle.dev.source.txt \
-  -valid_tgt ../redistribute/QG/train/dev.txt.shuffle.dev.bio \
+  -valid_src ../redistribute/QG/dev/dev.txt.shuffle.dev.source.txt \
+  -valid_tgt ../redistribute/QG/dev/dev.txt.shuffle.dev.bio \
   -save_data ../data/opennmt/answer_tagger_raw \
   -data_type bitext \
   -src_vocab_size 30000 \
