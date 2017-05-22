@@ -1,0 +1,29 @@
+#!/bin/bash
+
+mkdir data/opennmt/
+mkdir data/opennmt/answer_tagger_raw_2_layers/
+
+cd opennmt
+th preprocess.lua -train_src ../redistribute/QG/train/train.txt.source.txt \
+  -train_tgt ../redistribute/QG/train/train.txt.bio \
+  -valid_src ../redistribute/QG/dev/dev.txt.shuffle.dev.source.txt \
+  -valid_tgt ../redistribute/QG/dev/dev.txt.shuffle.dev.bio \
+  -save_data ../data/opennmt/answer_tagger_raw \
+  -data_type bitext \
+  -src_vocab_size 30000 \
+  -tgt_vocab_size 30000
+
+th train.lua -data ../data/opennmt/answer_tagger_raw-train.t7 \
+  -save_model ../data/opennmt/answer_tagger_raw_2_layers/model \
+  -rnn_size 512 \
+  -word_vec_size 300 \
+  -rnn_type GRU \
+  -enc_layers 2 \
+  -dec_layers 2 \
+  -dropout 0.5 \
+  -brnn true \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 500 \
+  -learning_rate 0.001 \
+  -gpuid 1
