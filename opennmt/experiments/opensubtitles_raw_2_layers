@@ -1,0 +1,29 @@
+#!/bin/bash
+
+mkdir data/opennmt/
+mkdir data/opennmt/opensubtitles_2_layers/
+
+cd opennmt
+th preprocess.lua -train_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/opensubtitle/opennmt/train.src.txt \
+  -train_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/opensubtitle/opennmt/train.tgt.txt \
+  -valid_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/opensubtitle/opennmt/test.src.txt \
+  -valid_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/opensubtitle/opennmt/test.tgt.txt \
+  -save_data ../data/opennmt/opensubtitles_2_layers \
+  -data_type bitext \
+  -src_vocab_size 50000 \
+  -tgt_vocab_size 50000
+
+th train.lua -data ../data/opennmt/opensubtitles_2_layers-train.t7 \
+  -save_model ../data/opennmt/opensubtitles_2_layers/model \
+  -rnn_size 512 \
+  -word_vec_size 300 \
+  -rnn_type GRU \
+  -enc_layers 2 \
+  -dec_layers 2 \
+  -dropout 0.5 \
+  -brnn true \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 500 \
+  -learning_rate 0.001 \
+  -gpuid 1
