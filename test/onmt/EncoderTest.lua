@@ -4,7 +4,7 @@ local tester = ...
 
 local encoderTest = torch.TestSuite()
 
-local function buildEncoder(class, rnnType, merge)
+local function buildEncoder(class, rnnType, merge, dropout, dropout_type, dropout_input)
   local cmd = onmt.utils.ExtendedCmdLine.new()
   class.declareOpts(cmd)
 
@@ -12,7 +12,14 @@ local function buildEncoder(class, rnnType, merge)
   opt.rnn_size = 10
   opt.rnn_type = rnnType or 'LSTM'
   opt.brnn_merge = merge or 'sum'
-  opt.dropout = 0
+  opt.dropout = dropout or 0
+  opt.dropout_type = dropout_type or 'naive'
+  opt.dropout_input = dropout_input or false
+  opt.max_batch_size = 64
+
+  if class == onmt.CNNEncoder then
+    opt.cnn_size = 10
+  end
 
   local inputNet = nn.LookupTable(10, 4)
   inputNet.inputSize = 4
@@ -39,7 +46,9 @@ local function genericCheckDim(encoder, opt)
   end
 
   tester:eq(context:size(), torch.LongStorage({3, timesteps, opt.rnn_size}))
-  tester:eq(#states, opt.layers * (opt.rnn_type == 'LSTM' and 2 or 1))
+  if not opt.cnn_size then
+    tester:eq(#states, opt.layers * (opt.rnn_type == 'LSTM' and 2 or 1))
+  end
   for _, v in ipairs(states) do
     tester:eq(v:size(), torch.LongStorage({3, opt.rnn_size}))
   end
@@ -52,13 +61,34 @@ local function genericCheckDim(encoder, opt)
 
   local gradInputs = encoder:backward(batch, gradStatesOutput, gradContextOutput)
 
-  tester:eq(#gradInputs, 4)
-  for _, v in ipairs(gradInputs) do
-    tester:eq(v:size(), torch.LongStorage({3}))
+  local steps = #gradInputs
+  if opt.cnn_size then
+    steps = gradInputs:size(2)
+  end
+  tester:eq(steps, 4)
+
+  if not opt.cnn_size then
+    for _, v in ipairs(gradInputs) do
+      tester:eq(v:size(), torch.LongStorage({3}))
+    end
+  else
+    tester:eq(gradInputs:size(1), 3)
   end
 
   return states, context
 end
+
+local function justForward(encoder)
+  local src = {
+    torch.IntTensor({5, 6, 7, 8}),
+    torch.IntTensor({5, 6, 7, 8}),
+    torch.IntTensor({5, 6, 7, 8}),
+  }
+  local batch = onmt.data.Batch.new(src)
+  encoder:training()
+  encoder:forward(batch)
+end
+
 
 local function genericCheckMasking(encoder)
   local src = {
@@ -68,8 +98,6 @@ local function genericCheckMasking(encoder)
   }
 
   local batch = onmt.data.Batch.new(src)
-
-  encoder:maskPadding()
 
   local _, context = encoder:forward(batch)
 
@@ -94,6 +122,49 @@ end
 function encoderTest.simple_LSTM()
   local encoder, opt = buildEncoder(onmt.Encoder, 'LSTM')
   genericCheckDim(encoder, opt)
+end
+
+function encoderTest.simple_LSTM_dropouts()
+  local dropout_updateOutput= nn.Dropout.updateOutput
+  local count
+  nn.Dropout.updateOutput = function(...) count=count+1;return dropout_updateOutput(...) end
+  local vdropout_updateOutput= onmt.VariationalDropout.updateOutput
+  local vcount
+  onmt.VariationalDropout.updateOutput = function(...) vcount=vcount+1;return vdropout_updateOutput(...) end
+
+  count = 0
+  vcount = 0
+  local encoder = buildEncoder(onmt.Encoder, 'LSTM', 'sum', 0)
+  justForward(encoder)
+  tester:eq(count, 4)
+  tester:eq(vcount, 0)
+
+  count = 0
+  encoder = buildEncoder(onmt.Encoder, 'LSTM', 'sum', 0.2)
+  justForward(encoder)
+  tester:eq(count, 4)
+  tester:eq(vcount, 0)
+
+  count = 0
+  encoder = buildEncoder(onmt.Encoder, 'LSTM', 'sum', 0.2, 'variational')
+  justForward(encoder)
+  tester:eq(count, 0)
+  tester:eq(vcount, 12)
+
+  vcount = 0
+  encoder = buildEncoder(onmt.Encoder, 'LSTM', 'sum', 0.2, 'naive', true)
+  justForward(encoder)
+  tester:eq(count, 8)
+  tester:eq(vcount, 0)
+
+  count = 0
+  encoder = buildEncoder(onmt.Encoder, 'LSTM', 'sum', 0.2, 'variational', true)
+  justForward(encoder)
+  tester:eq(count, 0)
+  tester:eq(vcount, 16)
+
+  nn.Dropout.updateOutput = dropout_updateOutput
+  onmt.VariationalDropout.updateOutput = vdropout_updateOutput
 end
 
 function encoderTest.simple_masking_LSTM()
@@ -186,15 +257,39 @@ function encoderTest.dbrnn_saveAndLoad_GRU()
   genericCheckSerial(encoder, opt)
 end
 
+function encoderTest.gnmt_LSTM()
+  local encoder, opt = buildEncoder(onmt.GoogleEncoder, 'LSTM')
+  genericCheckDim(encoder, opt)
+end
+
+function encoderTest.gnmt_masking_LSTM()
+  local encoder, _ = buildEncoder(onmt.GoogleEncoder, 'LSTM')
+  genericCheckMasking(encoder)
+end
+
+function encoderTest.gnmt_saveAndLoad_LSTM()
+  local encoder, opt = buildEncoder(onmt.GoogleEncoder, 'LSTM')
+  genericCheckSerial(encoder, opt)
+end
+
+function encoderTest.gnmt_GRU()
+  local encoder, opt = buildEncoder(onmt.GoogleEncoder, 'GRU')
+  genericCheckDim(encoder, opt)
+end
+
+function encoderTest.gnmt_masking_GRU()
+  local encoder, _ = buildEncoder(onmt.GoogleEncoder, 'GRU')
+  genericCheckMasking(encoder)
+end
+
+function encoderTest.gnmt_saveAndLoad_GRU()
+  local encoder, opt = buildEncoder(onmt.GoogleEncoder, 'GRU')
+  genericCheckSerial(encoder, opt)
+end
+
 function encoderTest.pdbrnn_LSTM()
   local encoder, opt = buildEncoder(onmt.PDBiEncoder, 'LSTM')
   genericCheckDim(encoder, opt)
-  local t = torch.Tensor{10,7,21}
-  local tred, length = encoder:contextSize(t, 21)
-  tester:assertTensorEq(tred, torch.Tensor{5,4,11})
-  tester:eq(length, 11)
-  local table_red = encoder:contextSize({10,7,21},0)
-  tester:eq(table_red, {5,4,11})
 end
 
 function encoderTest.pdbrnn_saveAndLoad_LSTM()
@@ -209,6 +304,21 @@ end
 
 function encoderTest.pdbrnn_saveAndLoad_GRU()
   local encoder, opt = buildEncoder(onmt.PDBiEncoder, 'GRU')
+  genericCheckSerial(encoder, opt)
+end
+
+function encoderTest.cnn()
+  local encoder, opt = buildEncoder(onmt.CNNEncoder)
+  genericCheckDim(encoder, opt)
+end
+
+function encoderTest.cnn_masking()
+  local encoder, _ = buildEncoder(onmt.CNNEncoder)
+  genericCheckMasking(encoder)
+end
+
+function encoderTest.cnn_saveAndLoad()
+  local encoder, opt = buildEncoder(onmt.CNNEncoder)
   genericCheckSerial(encoder, opt)
 end
 

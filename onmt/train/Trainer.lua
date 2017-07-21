@@ -64,6 +64,19 @@ local options = {
       valid = onmt.utils.ExtendedCmdLine.isUInt(),
       train_state = true
     }
+  },
+  {
+    '-validation_metric', 'perplexity',
+    [[Metric to use for validation.]],
+    {
+      enum = { 'perplexity', 'loss', 'bleu', 'ter', 'dlratio' }
+    }
+  },
+  {
+    '-save_validation_translation_every', 0,
+    [[When using translation-based validation metrics (e.g. BLEU, TER, etc.), also save the
+    translation every this many epochs to the file `<save_model>_epochN_validation_translation.txt`.
+    If = 0, will not save validation translation.]]
   }
 }
 
@@ -71,15 +84,34 @@ function Trainer.declareOpts(cmd)
   cmd:setCmdLineOptions(options, 'Trainer')
   onmt.train.Optim.declareOpts(cmd)
   onmt.train.Saver.declareOpts(cmd)
+  onmt.translate.Translator.declareOpts(cmd)
 end
 
 function Trainer:__init(args, model, dicts, firstBatch)
   self.args = onmt.utils.ExtendedCmdLine.getModuleOpts(args, options)
   self.args.profiler = args.profiler
   self.args.disable_mem_optimization = args.disable_mem_optimization
+  self.args.dropout_words = args.dropout_words
 
   self.optim = onmt.train.Optim.new(args)
   self.saver = onmt.train.Saver.new(args, model, self.optim, dicts)
+
+  if self.args.validation_metric == 'perplexity' then
+    self.evaluator = onmt.evaluators.PerplexityEvaluator.new()
+  elseif self.args.validation_metric == 'loss' then
+    self.evaluator = onmt.evaluators.LossEvaluator.new()
+  elseif self.args.validation_metric == 'bleu' then
+    self.evaluator = onmt.evaluators.BLEUEvaluator.new(args, dicts)
+  elseif self.args.validation_metric == 'ter' then
+    self.evaluator = onmt.evaluators.TEREvaluator.new(args, dicts)
+  elseif self.args.validation_metric == 'dlratio' then
+    self.evaluator = onmt.evaluators.DLratioEvaluator.new(args, dicts)
+  end
+
+  if self.args.save_validation_translation_every > 0 and not self.evaluator:canSaveTranslation() then
+    _G.logger:warning('Only translation-based evaluators can save the validation translation. Ignoring the option.')
+    self.args.save_validation_translation_every = 0
+  end
 
   model:training()
 
@@ -114,7 +146,7 @@ function Trainer:__init(args, model, dicts, firstBatch)
     if self.params[idx] then
       _G.params, _G.gradParams = self.params[idx], self.gradParams[idx]
     else
-      _G.params, _G.gradParams = _G.model:getParams()
+      _G.params, _G.gradParams = _G.model:getParams(true)
     end
 
     return idx, _G.params, _G.gradParams
@@ -124,21 +156,25 @@ function Trainer:__init(args, model, dicts, firstBatch)
   end)
 end
 
-function Trainer:eval(data)
-  local loss = 0
-  local totalWords = 0
-
+function Trainer:eval(data, epoch)
   self.model:evaluate()
+  _G.logger:info('Evaluating on the validation dataset...')
 
-  for i = 1, data:batchCount() do
-    local batch = onmt.utils.Cuda.convert(data:getBatch(i))
-    loss = loss + self.model:forwardComputeLoss(batch)
-    totalWords = totalWords + self.model:getOutputLabelsCount(batch)
+  local saveFile
+
+  if self.args.save_validation_translation_every > 0
+  and epoch % self.args.save_validation_translation_every == 0 then
+    saveFile = string.format('%s_validation_translation.txt', self.saver:formatEpochFile(epoch))
+    _G.logger:info('Saving validation translation to \'%s\'...', saveFile)
   end
 
+
+  local score = self.evaluator:eval(self.model, data, saveFile)
+
+  _G.logger:info('Validation %s: %.2f', self.evaluator.__tostring__(), score)
   self.model:training()
 
-  return math.exp(loss / totalWords)
+  return score
 end
 
 function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
@@ -146,9 +182,11 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
     return batchOrder and batchOrder[idx] or idx
   end
 
-  -- if target vocabulary for the batch is provided and generator support setting target vocabulary
-  if data.targetVocTensor and _G.model.setTargetVoc then
-    _G.model:setTargetVoc(data.targetVocTensor)
+  -- if vocabulary for the batch is provided and generator support setting vocabulary
+  if data.vocabTensor and self.model.setGeneratorVocab then
+    onmt.utils.Parallel.launch(function(_)
+      _G.model:setGeneratorVocab(data.vocabTensor)
+    end)
   end
 
   startIteration = startIteration or 1
@@ -177,7 +215,11 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
 
       for j = 1, math.min(onmt.utils.Parallel.count, data:batchCount() - i + 1) do
         local batchIdx = getBatchIdx(i + j - 1)
-        table.insert(batches, data:getBatch(batchIdx))
+        local batch = data:getBatch(batchIdx)
+        if self.args.dropout_words and self.args.dropout_words > 0 then
+          batch:dropoutWords(self.args.dropout_words)
+        end
+        table.insert(batches, batch)
         totalSize = totalSize + batches[#batches].size
       end
 
@@ -278,6 +320,9 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
           local batchIdx = getBatchIdx(i)
 
           _G.batch = data:getBatch(batchIdx)
+          if self.args.dropout_words and self.args.dropout_words > 0 then
+            _G.batch:dropoutWords(self.args.dropout_words)
+          end
           table.insert(batches, onmt.utils.Tensor.deepClone(_G.batch))
           onmt.utils.Cuda.convert(_G.batch)
 
@@ -322,8 +367,10 @@ function Trainer:trainEpoch(data, epoch, startIteration, batchOrder)
     epochState:log(numIterations)
   end
 
-  if data.targetVocTensor and _G.model.setTargetVoc then
-    _G.model:unsetTargetVoc()
+  if data.vocabTensor and self.model.setGeneratorVocab then
+    onmt.utils.Parallel.launch(function(_)
+      _G.model:unsetGeneratorVocab()
+    end)
   end
 
   epochProfiler:stop('train')
@@ -376,15 +423,13 @@ function Trainer:train(trainData, validData, trainStates)
     end
 
     local epochState = self:trainEpoch(trainData, epoch, self.args.start_iteration, batchOrder)
-    local validPpl = self:eval(validData)
+    local validScore = self:eval(validData, epoch)
 
-    _G.logger:info('Validation perplexity: %.2f', validPpl)
-
-    self.optim:updateLearningRate(validPpl, epoch)
+    self.optim:updateLearningRate(validScore, epoch, self.evaluator)
 
     unsavedEpochs = unsavedEpochs + 1
     if unsavedEpochs == self.args.save_every_epochs then
-      self.saver:saveEpoch(validPpl, epochState)
+      self.saver:saveEpoch(validScore, epochState)
       unsavedEpochs = 0
     end
 
