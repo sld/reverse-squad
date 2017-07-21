@@ -56,14 +56,15 @@ function Decoder:__init(args, inputNetwork, generator, attentionModel)
   end
 
   local rnn = RNN.new(args.layers, inputSize, args.rnn_size,
-                      args.dropout, args.residual, args.dropout_input)
+                      args.dropout, args.residual, args.dropout_input, args.dropout_type)
 
   self.rnn = rnn
   self.inputNet = inputNetwork
 
   self.args = args
   self.args.rnnSize = self.rnn.outputSize
-  self.args.numEffectiveLayers = self.rnn.numEffectiveLayers
+  self.args.numStates = self.rnn.numStates
+  self.args.dropout_type = args.dropout_type
 
   self.args.inputIndex = {}
   self.args.outputIndex = {}
@@ -89,11 +90,13 @@ function Decoder.load(pretrained)
   local self = torch.factory('onmt.Decoder')()
 
   self.args = pretrained.args
+  self.args.numStates = self.args.numStates or self.args.numEffectiveLayers -- Backward compatibility.
 
   parent.__init(self, pretrained.modules[1])
   self.generator = onmt.Generator.load(pretrained.modules[2])
   self:add(self.generator)
 
+  self:removePaddingMask(true)
   self:resetPreallocation()
 
   return self
@@ -140,7 +143,7 @@ function Decoder:_buildModel(attentionModel)
   local states = {}
 
   -- Inputs are previous layers first.
-  for _ = 1, self.args.numEffectiveLayers do
+  for _ = 1, self.args.numStates do
     local h0 = nn.Identity()() -- batchSize x rnnSize
     table.insert(inputs, h0)
     table.insert(states, h0)
@@ -173,9 +176,9 @@ function Decoder:_buildModel(attentionModel)
   -- Forward states and input into the RNN.
   local outputs = self.rnn(states)
 
-  if self.args.numEffectiveLayers > 1 then
+  if self.args.numStates > 1 then
     -- The output of a subgraph is a node: split it to access the last RNN output.
-    outputs = { outputs:split(self.args.numEffectiveLayers) }
+    outputs = { outputs:split(self.args.numStates) }
   else
     outputs = { outputs }
   end
@@ -197,14 +200,12 @@ function Decoder:findAttentionModel()
     self.network:apply(function (layer)
       if layer.name == 'decoderAttn' then
         self.decoderAttn = layer
-      elseif layer.name == 'softmaxAttn' then
-        self.softmaxAttn = layer
       end
     end)
     self.decoderAttnClones = {}
   end
   for t = #self.decoderAttnClones+1, #self.networkClones do
-    self:net(t):apply(function (layer)
+    self.networkClones[t]:apply(function (layer)
       if layer.name == 'decoderAttn' then
         self.decoderAttnClones[t] = layer
       elseif layer.name == 'softmaxAttn' then
@@ -214,29 +215,21 @@ function Decoder:findAttentionModel()
   end
 end
 
---[[ Mask padding means that the attention-layer is constrained to
-  give zero-weight to padding. This is done by storing a reference
-  to the softmax attention-layer.
+--[[ Replace the attention softmax with the module returned by calling the given builder.
 
-  Parameters:
+Paramters:
 
-  * See  [onmt.MaskedSoftmax](onmt+modules+MaskedSoftmax).
+  * `builder` - a callable that returns a new module.
+
 --]]
-function Decoder:maskPadding(sourceSizes, sourceLength)
+function Decoder:replaceAttentionSoftmax(builder)
   self:findAttentionModel()
 
   local function substituteSoftmax(module)
     if module.name == 'softmaxAttn' then
-      local mod
-      if sourceSizes ~= nil then
-        mod = onmt.MaskedSoftmax(sourceSizes, sourceLength)
-      else
-        mod = nn.SoftMax()
-      end
-
+      local mod = builder()
       mod.name = 'softmaxAttn'
       mod:type(module._type)
-      self.softmaxAttn = mod
       return mod
     else
       return module
@@ -245,8 +238,60 @@ function Decoder:maskPadding(sourceSizes, sourceLength)
 
   self.decoderAttn:replace(substituteSoftmax)
 
+  -- Also replace it in every clones during training.
   for t = 1, #self.networkClones do
     self.decoderAttnClones[t]:replace(substituteSoftmax)
+  end
+end
+
+function Decoder:getAttention()
+  self:findAttentionModel()
+
+  local baseModule
+  local attention
+
+  if #self.networkClones == 0 then
+    baseModule = self.decoderAttn
+  else
+    baseModule = self.decoderAttnClones[1]
+  end
+
+  baseModule:apply(function (layer)
+    if layer.name == 'softmaxAttn' then
+      attention = layer
+    end
+  end)
+
+  if attention then
+    return attention.output:clone()
+  end
+end
+
+--[[ Mask padding means that the attention-layer is constrained to
+  give zero-weight to padding on the source side.
+
+Parameters:
+
+  * See  [onmt.MaskedSoftmax](onmt+modules+MaskedSoftmax).
+--]]
+function Decoder:addPaddingMask(sourceSizes, sourceLength)
+  -- If there is no padding on the source side, no need for a mask.
+  if torch.all(torch.eq(sourceSizes, sourceLength)) then
+    self:removePaddingMask()
+  -- Otherwise, invalidate the padding mask if needed.
+  elseif not self.paddingMask
+      or not sourceSizes:isSameSizeAs(self.paddingMask)
+      or torch.any(torch.ne(sourceSizes, self.paddingMask)) then
+    self.paddingMask = sourceSizes
+    self:replaceAttentionSoftmax(function() return onmt.MaskedSoftmax(sourceSizes, sourceLength) end)
+  end
+end
+
+--[[ Remove mask applied to the attention softmax. ]]
+function Decoder:removePaddingMask(force)
+  if self.paddingMask or force then
+    self.paddingMask = nil
+    self:replaceAttentionSoftmax(function() return nn.SoftMax() end)
   end
 end
 
@@ -259,16 +304,30 @@ Parameters:
   * `context` - encoder output (batch x n x rnnSize)
   * `prevOut` - previous distribution (batch x #words)
   * `t` - current timestep
+  * `sourceSizes` - a Tensor with the length of source sequences
+  * `sourceLength` - the source batch sequence length
 
 Returns:
 
  1. `out` - Top-layer hidden state.
  2. `states` - All states.
 --]]
-function Decoder:forwardOne(input, prevStates, context, prevOut, t)
-  local inputs = {}
+function Decoder:forwardOne(input, prevStates, context, prevOut, t, sourceSizes, sourceLength)
+  if sourceSizes then
+    -- If the encoder reduced the time dimension, resize the padding mask accordingly.
+    if sourceLength ~= context:size(2) then
+      local multiplier = math.ceil(sourceLength / context:size(2))
+      sourceLength = context:size(2)
+      sourceSizes = sourceSizes:clone():float():div(multiplier):ceil():typeAs(sourceSizes)
+    end
 
-  -- Create RNN input (see sequencer.lua `buildNetwork('dec')`).
+    self:addPaddingMask(sourceSizes, sourceLength)
+  else
+    self:removePaddingMask()
+  end
+
+  -- Create the graph input.
+  local inputs = {}
   onmt.utils.Table.append(inputs, prevStates)
   table.insert(inputs, input)
   table.insert(inputs, context)
@@ -331,7 +390,13 @@ function Decoder:forwardAndApply(batch, initialStates, context, func)
   local prevOut
 
   for t = 1, batch.targetLength do
-    prevOut, states = self:forwardOne(batch:getTargetInput(t), states, context, prevOut, t)
+    prevOut, states = self:forwardOne(batch:getTargetInput(t),
+                                      states,
+                                      context,
+                                      prevOut,
+                                      t,
+                                      batch:variableLengths() and batch.sourceSize or nil,
+                                      batch:variableLengths() and batch.sourceLength or nil)
     func(prevOut, t)
   end
 end
@@ -348,11 +413,16 @@ end
 --]]
 function Decoder:forward(batch, initialStates, context)
   initialStates = initialStates
-    or onmt.utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
+    or onmt.utils.Tensor.initTensorTable(self.args.numStates,
                                          onmt.utils.Cuda.convert(torch.Tensor()),
                                          { batch.size, self.args.rnnSize })
   if self.train then
     self.inputs = {}
+
+    if self.args.dropout_type == 'variational' then
+      -- Initialize noise for variational dropout.
+      onmt.VariationalDropout.initializeNetwork(self.network)
+    end
   end
 
   local outputs = {}
@@ -377,15 +447,14 @@ Parameters:
   -- ]]
 function Decoder:backward(batch, outputs, criterion)
   if self.gradOutputsProto == nil then
-    self.gradOutputsProto = onmt.utils.Tensor.initTensorTable(self.args.numEffectiveLayers + 1,
+    self.gradOutputsProto = onmt.utils.Tensor.initTensorTable(self.args.numStates + 1,
                                                               self.gradOutputProto,
                                                               { batch.size, self.args.rnnSize })
   end
 
   local gradStatesInput = onmt.utils.Tensor.reuseTensorTable(self.gradOutputsProto,
                                                              { batch.size, self.args.rnnSize })
-  local gradContextInput = onmt.utils.Tensor.reuseTensor(self.gradContextProto,
-                                                         { batch.size, batch.encoderOutputLength or batch.sourceLength, self.args.rnnSize })
+  local gradContextInput
 
   local loss = 0
   local indvAvgLoss = torch.zeros(outputs[1]:size(1))
@@ -439,6 +508,12 @@ function Decoder:backward(batch, outputs, criterion)
     -- Compute the standard backward.
     local gradInput = self:net(t):backward(self.inputs[t], gradStatesInput)
 
+    if not gradContextInput then
+      gradContextInput = onmt.utils.Tensor.reuseTensor(
+        self.gradContextProto,
+        { batch.size, gradInput[self.args.inputIndex.context]:size(2), self.args.rnnSize })
+    end
+
     -- Accumulate encoder output gradients.
     gradContextInput:add(gradInput[self.args.inputIndex.context])
     gradStatesInput[#gradStatesInput]:zero()
@@ -473,7 +548,7 @@ Parameters:
 --]]
 function Decoder:computeLoss(batch, initialStates, context, criterion)
   initialStates = initialStates
-    or onmt.utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
+    or onmt.utils.Tensor.initTensorTable(self.args.numStates,
                                          onmt.utils.Cuda.convert(torch.Tensor()),
                                          { batch.size, self.args.rnnSize })
 
@@ -499,7 +574,7 @@ Parameters:
 --]]
 function Decoder:computeScore(batch, initialStates, context)
   initialStates = initialStates
-    or onmt.utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
+    or onmt.utils.Tensor.initTensorTable(self.args.numStates,
                                          onmt.utils.Cuda.convert(torch.Tensor()),
                                          { batch.size, self.args.rnnSize })
 

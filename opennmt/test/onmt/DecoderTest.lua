@@ -148,11 +148,23 @@ function decoderTest.masking()
 
   decoder:evaluate()
 
-  decoder:maskPadding(torch.LongTensor({2,5,3,5}), 5)
+  decoder:addPaddingMask(torch.LongTensor({2,5,3,5}), 5)
   tester:eq(moduleExists(decoder, 'onmt.MaskedSoftmax'), true)
 
-  decoder:maskPadding()
+  decoder:removePaddingMask()
   tester:eq(moduleExists(decoder, 'onmt.MaskedSoftmax'), false)
+end
+
+function decoderTest.maskingSaveAndLoad()
+  local decoder, _ = buildDecoder(false, 'LSTM')
+
+  decoder:addPaddingMask(torch.LongTensor({2,5,3,5}), 5)
+
+  torch.save('dec.t7', decoder:serialize())
+  local reload = decoder.load(torch.load('dec.t7'))
+  os.remove('dec.t7')
+
+  tester:eq(moduleExists(reload, 'onmt.MaskedSoftmax'), false)
 end
 
 function decoderTest.individualLosses()

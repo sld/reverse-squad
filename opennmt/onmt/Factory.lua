@@ -2,9 +2,25 @@ local Factory = torch.class('Factory')
 
 local options = {
   {
+    '-encoder_type', 'rnn',
+    [[Encoder type.]],
+    {
+      enum = { 'rnn', 'brnn', 'dbrnn', 'pdbrnn', 'gnmt', 'cnn' },
+      structural = 0,
+      depends = function(opt)
+                  if opt.encoder_type == 'cnn' then
+                    if opt.bridge == 'copy' then
+                      return false, "CNN encoder doesn't work with copy bridge. Please use either 'none' or 'dense'." end
+                  end
+                  return true
+                end
+    }
+  },
+  {
     '-brnn', false,
     [[Use a bidirectional encoder.]],
     {
+      deprecatedBy = { 'encoder_type', 'brnn' },
       structural = 0
     }
   },
@@ -12,6 +28,7 @@ local options = {
     '-dbrnn', false,
     [[Use a deep bidirectional encoder.]],
     {
+      deprecatedBy = { 'encoder_type', 'dbrnn' },
       structural = 0
     }
   },
@@ -19,6 +36,7 @@ local options = {
     '-pdbrnn', false,
     [[Use a pyramidal deep bidirectional encoder.]],
     {
+      deprecatedBy = { 'encoder_type', 'pdbrnn' },
       structural = 0
     }
   },
@@ -37,6 +55,8 @@ function Factory.declareOpts(cmd)
   onmt.BiEncoder.declareOpts(cmd)
   onmt.DBiEncoder.declareOpts(cmd)
   onmt.PDBiEncoder.declareOpts(cmd)
+  onmt.GoogleEncoder.declareOpts(cmd)
+  onmt.CNNEncoder.declareOpts(cmd)
   onmt.GlobalAttention.declareOpts(cmd)
 end
 
@@ -131,6 +151,17 @@ local function buildInputNetwork(opt, dicts, wordSizes, pretrainedWords, fixWord
   return inputNetwork
 end
 
+local function describeRNN(opt)
+  _G.logger:info('   - structure: cell = %s; layers = %d; rnn_size = %d; dropout = '
+                   .. opt.dropout .. ' (%s)',
+                 opt.rnn_type, opt.layers, opt.rnn_size, opt.dropout_type)
+end
+
+local function describeCNN(opt)
+  _G.logger:info('   - structure: cnn_kernel = %d; cnn_layers = %d; cnn_size = %d;',
+                   opt.cnn_kernel, opt.cnn_layers, opt.cnn_size)
+end
+
 function Factory.getOutputSizes(dicts)
   local outputSizes = { dicts.words:size() }
   for i = 1, #dicts.features do
@@ -143,21 +174,30 @@ function Factory.buildEncoder(opt, inputNetwork)
 
   local function describeEncoder(name)
     _G.logger:info('   - type: %s', name)
-    _G.logger:info('   - structure: cell = %s; layers = %d; rnn_size = %d; dropout = ' .. opt.dropout,
-                   opt.rnn_type, opt.layers, opt.rnn_size)
+    if name == 'CNN' then
+      describeCNN(opt)
+    else
+      describeRNN(opt)
+    end
   end
 
-  if opt.brnn then
-    describeEncoder('bidirectional')
+  if opt.encoder_type == 'brnn' then
+    describeEncoder('bidirectional RNN')
     return onmt.BiEncoder.new(opt, inputNetwork)
-  elseif opt.dbrnn then
-    describeEncoder('deep bidirectional')
+  elseif opt.encoder_type == 'dbrnn' then
+    describeEncoder('deep bidirectional RNN')
     return onmt.DBiEncoder.new(opt, inputNetwork)
-  elseif opt.pdbrnn then
-    describeEncoder('pyramidal deep bidirectional')
+  elseif opt.encoder_type == 'pdbrnn' then
+    describeEncoder('pyramidal deep bidirectional RNN')
     return onmt.PDBiEncoder.new(opt, inputNetwork)
+  elseif opt.encoder_type == 'gnmt' then
+    describeEncoder('GNMT')
+    return onmt.GoogleEncoder.new(opt, inputNetwork)
+  elseif opt.encoder_type == 'cnn' then
+    describeEncoder('CNN')
+    return onmt.CNNEncoder.new(opt, inputNetwork)
   else
-    describeEncoder('simple')
+    describeEncoder('unidirectional RNN')
     return onmt.Encoder.new(opt, inputNetwork)
   end
 
@@ -184,6 +224,10 @@ function Factory.loadEncoder(pretrained)
     encoder = onmt.PDBiEncoder.load(pretrained)
   elseif pretrained.name == 'DBiEncoder' then
     encoder = onmt.DBiEncoder.load(pretrained)
+  elseif pretrained.name == 'GoogleEncoder' then
+    encoder = onmt.GoogleEncoder.load(pretrained)
+  elseif pretrained.name == 'CNNEncoder' then
+    encoder = onmt.CNNEncoder.load(pretrained)
   else
     -- Keep for backward compatibility.
     local brnn = #pretrained.modules == 2
@@ -198,8 +242,7 @@ function Factory.loadEncoder(pretrained)
 end
 
 function Factory.buildDecoder(opt, inputNetwork, generator, attnModel)
-  _G.logger:info('   - structure: cell = %s; layers = %d; rnn_size = %d; dropout = ' .. opt.dropout,
-                 opt.rnn_type, opt.layers, opt.rnn_size)
+  describeRNN(opt)
 
   return onmt.Decoder.new(opt, inputNetwork, generator, attnModel)
 end
@@ -224,6 +267,10 @@ end
 function Factory.buildGenerator(opt, dicts)
   local sizes = Factory.getOutputSizes(dicts)
   return onmt.Generator(opt, sizes)
+end
+
+function Factory.loadGenerator(pretrained)
+  return onmt.Generator.load(pretrained)
 end
 
 function Factory.buildAttention(args)

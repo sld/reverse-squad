@@ -110,7 +110,6 @@ end
 function Seq2Seq:__init(args, dicts)
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
-  self.args.uneven_batches = args.uneven_batches
 
   if not dicts.src then
     -- the input is already a vector
@@ -127,12 +126,12 @@ function Seq2Seq:__init(args, dicts)
 
   self.models.bridge = onmt.Bridge(args.bridge,
                                    encArgs.rnn_size,
-                                   self.models.encoder.args.numEffectiveLayers,
+                                   self.models.encoder.args.numStates,
                                    decArgs.rnn_size,
-                                   self.models.decoder.args.numEffectiveLayers)
+                                   self.models.decoder.args.numStates)
 
   self.criterion = onmt.ParallelClassNLLCriterion(onmt.Factory.getOutputSizes(dicts.tgt))
-  self.tgtVocSize = dicts.tgt.words:size(1)
+  self.tgtVocabSize = dicts.tgt.words:size(1)
 
 end
 
@@ -141,13 +140,12 @@ function Seq2Seq.load(args, models, dicts)
 
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
-  self.args.uneven_batches = args.uneven_batches
 
   self.models.encoder = onmt.Factory.loadEncoder(models.encoder)
   self.models.decoder = onmt.Factory.loadDecoder(models.decoder)
   self.models.bridge = onmt.Bridge.load(models.bridge)
   self.criterion = onmt.ParallelClassNLLCriterion(onmt.Factory.getOutputSizes(dicts.tgt))
-  self.tgtVocSize = dicts.tgt.words:size(1)
+  self.tgtVocabSize = dicts.tgt.words:size(1)
 
   return self
 end
@@ -157,9 +155,13 @@ function Seq2Seq.modelName()
   return 'Sequence to Sequence with Attention'
 end
 
--- Returns expected dataMode.
-function Seq2Seq.dataType()
-  return 'bitext'
+-- Returns expected default datatype or if passed a parameter, returns if it is supported
+function Seq2Seq.dataType(datatype)
+  if not datatype then
+    return 'bitext'
+  else
+    return datatype == 'bitext' or datatype == 'feattext'
+  end
 end
 
 function Seq2Seq:returnIndividualLosses(enable)
@@ -172,14 +174,14 @@ function Seq2Seq:returnIndividualLosses(enable)
   return true
 end
 
-function Seq2Seq:setTargetVoc(t)
-  self.models.decoder.generator:setTargetVoc(t)
+function Seq2Seq:setGeneratorVocab(t)
+  self.models.decoder.generator:setGeneratorVocab(t)
   self.criterion.mainCriterion.weights:resize(t:size(1))
 end
 
-function Seq2Seq:unsetTargetVoc()
-  self.models.decoder.generator:setTargetVoc()
-  self.criterion.mainCriterion.weights:resize(self.tgtVocSize)
+function Seq2Seq:unsetGeneratorVocab()
+  self.models.decoder.generator:setGeneratorVocab()
+  self.criterion.mainCriterion.weights:resize(self.tgtVocabSize)
 end
 
 function Seq2Seq:enableProfiling()
@@ -193,30 +195,13 @@ function Seq2Seq:getOutput(batch)
   return batch.targetOutput
 end
 
-function Seq2Seq:maskPadding(batch)
-  self.models.encoder:maskPadding()
-  if batch and batch.uneven then
-    self.models.decoder:maskPadding(self.models.encoder:contextSize(batch.sourceSize, batch.sourceLength))
-  else
-    self.models.decoder:maskPadding()
-  end
-end
-
 function Seq2Seq:forwardComputeLoss(batch)
-  if self.args.uneven_batches then
-    self:maskPadding(batch)
-  end
-
   local encoderStates, context = self.models.encoder:forward(batch)
   local decoderInitStates = self.models.bridge:forward(encoderStates)
   return self.models.decoder:computeLoss(batch, decoderInitStates, context, self.criterion)
 end
 
 function Seq2Seq:trainNetwork(batch, dryRun)
-  if self.args.uneven_batches then
-    self:maskPadding(batch)
-  end
-
   local encStates, context = self.models.encoder:forward(batch)
   local decInitStates = self.models.bridge:forward(encStates)
   local decOutputs = self.models.decoder:forward(batch, decInitStates, context)
