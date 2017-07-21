@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir data/opennmt/
+mkdir data/opennmt/facebook-news_2_layers/
+
+cd opennmt
+th preprocess.lua -train_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train.src.txt \
+  -train_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train.tgt.txt \
+  -valid_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test.src.txt \
+  -valid_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test.tgt.txt \
+  -save_data ../data/opennmt/facebook-news_2_layers \
+  -data_type bitext \
+  -src_vocab_size 100000 \
+  -tgt_vocab_size 100000
+
+th train.lua -data ../data/opennmt/facebook-news_2_layers-train.t7 \
+  -save_model ../data/opennmt/facebook-news_2_layers/model \
+  -rnn_size 512 \
+  -word_vec_size 300 \
+  -rnn_type GRU \
+  -enc_layers 2 \
+  -dec_layers 2 \
+  -brnn true \
+  -encoder_type gnmt \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 2500 \
+  -learning_rate 0.001 \
+  -max_batch_size 512 \
+  -gpuid 1
