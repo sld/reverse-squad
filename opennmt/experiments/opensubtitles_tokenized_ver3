@@ -1,0 +1,30 @@
+#!/bin/bash
+
+mkdir data/opennmt/
+mkdir data/opennmt/opensubtitles_ver3/
+
+cd opennmt
+th preprocess.lua -train_src ../data/opennmt_ver2/train_ver2_tokenized.src.txt \
+  -train_tgt ../data/opennmt_ver2/train_ver2_tokenized.tgt.txt \
+  -valid_src ../data/opennmt_ver2/test_ver2_tokenized.src.txt \
+  -valid_tgt ..data/opennmt_ver2/test_ver2_tokenized.tgt.txt \
+  -save_data ../data/opennmt/opensubtitles_ver3 \
+  -data_type bitext \
+  -src_vocab_size 100000 \
+  -tgt_vocab_size 100000
+
+th train.lua -data ../data/opennmt/opensubtitles_ver3-train.t7 \
+  -save_model ../data/opennmt/opensubtitles_ver3/model \
+  -rnn_size 256 \
+  -word_vec_size 300 \
+  -rnn_type GRU \
+  -enc_layers 2 \
+  -dec_layers 2 \
+  -encoder_type gnmt \
+  -end_epoch 50 \
+  -optim adam \
+  -save_every 1000 \
+  -learning_rate 0.001 \
+  -max_batch_size 512 \
+  -gpuid 2
+

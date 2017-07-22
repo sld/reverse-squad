@@ -1,30 +1,34 @@
 #!/bin/bash
 
 mkdir data/opennmt/
-mkdir data/opennmt/facebook-news_2_layers/
+mkdir data/opennmt/facebook-news_2_layers_ver3/
 
 cd opennmt
-th preprocess.lua -train_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train.src.txt \
-  -train_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train.tgt.txt \
-  -valid_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test.src.txt \
-  -valid_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test.tgt.txt \
-  -save_data ../data/opennmt/facebook-news_2_layers \
+th preprocess.lua -train_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train_ver3.src.txt \
+  -train_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_train_ver3.tgt.txt \
+  -valid_src /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test_ver3.src.txt \
+  -valid_tgt /mnt/245d363f-e0e4-4c4e-b228-df2ec070f242/corporas/facebook-news/opennmt/tokenized_test_ver3.tgt.txt \
+  -save_data ../data/opennmt/facebook-news_2_layers_ver3 \
   -data_type bitext \
   -src_vocab_size 100000 \
-  -tgt_vocab_size 100000
+  -tgt_vocab_size 100000 \
+  -src_seq_length 150 \
+  -tgt_seq_length 150 \
+  -src_vocab ../data/opennmt/facebook-news_2_layers.src.dict \
+  -tgt_vocab ../data/opennmt/facebook-news_2_layers.tgt.dict
 
-th train.lua -data ../data/opennmt/facebook-news_2_layers-train.t7 \
-  -save_model ../data/opennmt/facebook-news_2_layers/model \
-  -rnn_size 512 \
+th train.lua -data ../data/opennmt/facebook-news_2_layers_ver3-train.t7 \
+  -save_model ../data/opennmt/facebook-news_2_layers_ver3/model \
+  -rnn_size 256 \
   -word_vec_size 300 \
   -rnn_type GRU \
   -enc_layers 2 \
   -dec_layers 2 \
-  -brnn true \
   -encoder_type gnmt \
   -end_epoch 50 \
   -optim adam \
-  -save_every 2500 \
+  -save_every 500 \
   -learning_rate 0.001 \
-  -max_batch_size 512 \
-  -gpuid 1
+  -max_batch_size 64 \
+  -gpuid 1 \
+  -train_from ../data/opennmt/facebook-news_2_layers/model_checkpoint.t7
